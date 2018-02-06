@@ -1,0 +1,798 @@
+---
+
+      
+
+---
+
+```{r, include=FALSE}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(readxl)
+library(mapproj)
+library(ggmap)
+#library(reshape)
+#library(vcd)
+library(plotluck)
+library(PerformanceAnalytics)
+library(psych)
+library(scales)
+library(car)
+library(labelled)
+
+brfss = read.csv("C:/Users/Biljana/Desktop/brfss_final_load_R.csv")
+```
+
+
+
+
+# What is the BRFSS?
+
+##
+- Nation's premier system of health survey measuring 
+    - health related risk behaviors,
+  
+    - chronic conditions
+  
+    - preventative measures
+  
+- Survey Methodology:
+    - Telephone Survey 
+    
+    - Prospective observational study 
+  
+    - Stratified sampling method
+  
+    - Random sampling, not random assignment 
+
+
+#Analysis Overview
+
+##
+
+- Used one year dataset, not prevalence data 
+    - 500k Observations and 330 variables 
+    - 80 Relevant variables were extracted
+    - Focus on Respondents' Perception of Health and what factors impact it  
+
+- Analysis structure 
+    - Socio- Economic factors 
+    - Obesity and exercise
+    - Chronic diseases 
+    - Behavioral Risks 
+
+#Socio- Demographic Characteristics
+
+##
+```{r, echo = FALSE}
+brfss1 = brfss %>% 
+  dplyr::select(X_state,Region,marital,children,educa,employ1,income2,renthom1,sex,X_imprace,
+X_age_g,htin4,htm4,X_chldcnt,X_educag,X_incomg,X_age80,exerany2,X_rfbmi5,actin11_,pa1min_,exract11,drnkany5,X_rfdrhv4,addepev2,daily_veg,fruit_cons_category,sleptim1,X_bmi5cat,genhlth,X_rfhlth,genhlth ) 
+
+brfss1= brfss1[complete.cases(brfss1), ]
+
+ggplot(brfss1,aes(x=as.factor(X_state),fill=sex)) + 
+  geom_bar(data=subset(brfss1,sex=="Female")) + 
+  geom_bar(data=subset(brfss1,sex=="Male"),aes(y=..count..*(-1))) + 
+  scale_y_continuous(breaks=seq(-60000,90000,10000),labels=abs(seq(-60000,90000,10000))) + 
+  coord_flip()+labs(x="State",y="Number of responders")+annotate("text", x ="Texas" , y = 1000, label = "We are here!",fontface="italic",size=3)+theme_classic()+theme(axis.text.x = element_text(angle = 45, hjust = 1))+ggtitle("Where do our responders live?")
+
+```
+
+##
+```{r, echo = FALSE}
+ggplot(brfss1,aes(x=as.factor(X_age_g),fill=sex)) + 
+  geom_bar(data=subset(brfss1,sex=="Female")) + 
+  geom_bar(data=subset(brfss1,sex=="Male"),aes(y=..count..*(-1))) + 
+  scale_y_continuous(breaks=seq(-60000,90000,10000),labels=abs(seq(-60000,90000,10000))) + 
+  coord_flip()+labs(x="Age",y="Population")+ annotate("text", x ="Age 65 or older" , y = 30000, label = "This is my grandma!",fontface="italic")+theme_classic()+theme(axis.text.x = element_text(angle = 45, hjust = 1))+ggtitle("Most of our responders are senior citizens")
+```
+
+##
+
+```{r, echo= FALSE}
+brfss1$X_educag_factor = factor(brfss1$X_educag, levels = c("Did not graduate high school", "Graduated high school","Graduated from college or technical school","Attended college or technical school"))
+
+total_grp = brfss1 %>% 
+              group_by(X_educag_factor) %>%
+              count(X_educag_factor)
+perc = brfss1%>% 
+         group_by(Region, X_educag_factor)  %>% 
+         count(Region)
+perc = merge(perc, total_grp, by = "X_educag_factor")
+perc = mutate(perc, Percentage = n.x/n.y)
+ggplot(perc, aes(x = Region, y = Percentage, fill = X_educag_factor)) + 
+  geom_bar(stat= "identity", position = "dodge") + 
+  scale_y_continuous(labels = percent)+
+  facet_grid(.~X_educag_factor,labeller = label_wrap_gen(width=15)) + 
+  geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage - .02 ), hjust = 0.3, size = 3.3)+
+   theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none"
+        ) +ggtitle("40% of responders who did not graduate from high school live in the South")
+```
+
+##
+```{r, echo = FALSE}
+brfss1$income2_factor = factor(brfss1$income2, levels = c("Less than $10,000", "Less than $15,000", "Less than $20,000", "Less than $25,000", "Less than $35,000","Less than $50,000","Less than $75,000","$75,000 or more"))
+
+total_grp = brfss1 %>%
+              group_by(income2_factor) %>%
+              count(income2_factor)
+
+perc = brfss1 %>%
+         group_by(Region, income2_factor)  %>%
+         count(Region)
+perc = merge(perc, total_grp, by = "income2_factor")
+perc = mutate(perc, Percentage = n.x/n.y)
+
+ggplot(perc, aes(x = Region, y = Percentage,fill = income2_factor)) +
+  geom_bar(stat= "identity", position = "dodge") +
+  scale_y_continuous(labels = percent)+
+  facet_grid(.~income2_factor,labeller = label_wrap_gen(width=15)) +
+  geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage - .02 ), hjust = 0.3, size = 3.3)+
+   theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none"
+        )+ggtitle("South also has highest percentage of responders below povery line")
+```
+
+##
+```{r, echo = FALSE}
+brfss_reorder = brfss1 %>% dplyr::select(genhlth,marital, X_educag,sex,X_chldcnt, X_incomg,X_age_g, X_imprace, employ1,Region  ) %>%
+   mutate(genhlth = ordered(factor(genhlth, levels = c("Poor", "Fair", "Good", "Very good", "Excellent"))))
+
+total_grp = brfss_reorder %>% 
+              group_by(genhlth) %>%
+              count(genhlth)
+perc = brfss_reorder %>% 
+         group_by(Region, genhlth)  %>% 
+         count(Region)
+perc = merge(perc, total_grp, by = "genhlth")
+perc = mutate(perc, Percentage = n.x/n.y)
+ggplot(perc, aes(x = Region, y = Percentage, fill = genhlth)) + 
+  geom_bar(stat= "identity", position = "dodge") + 
+  scale_y_continuous(labels = percent)+
+  facet_grid(.~genhlth) + 
+  geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage - .02 ), hjust = 0.3, size = 3.3)+
+   theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 45, hjust = 1),legend.position="none"
+        )+ggtitle("South region responders with higher self rated health percentages") 
+```
+
+
+##
+```{r, echo = FALSE}
+brfss_reorder2 =brfss1 %>% dplyr::select(genhlth, marital, X_educag,sex,X_chldcnt, X_incomg,X_age_g, X_imprace, employ1,Region) %>%
+   mutate(genhlth = ordered(factor(genhlth, levels = c("Poor", "Fair", "Good", "Very good", "Excellent"))))
+total_grp_edu = brfss_reorder2 %>% 
+              group_by(genhlth) %>%
+              count(genhlth)
+perc_edu = brfss_reorder2 %>% 
+         group_by(X_educag, genhlth)  %>% 
+         count(X_educag)
+perc_edu = merge(perc_edu, total_grp_edu, by = "genhlth")
+perc_edu = mutate(perc_edu, Percentage = n.x/n.y)
+ggplot(perc_edu, aes(x = X_educag, y = Percentage, fill = genhlth)) + 
+  geom_bar(stat= "identity", position = "dodge") + 
+  scale_y_continuous(labels = percent)+
+  scale_x_discrete(labels=c("Attended college or technical school"="College attended","Did not graduate high school"="High school attended","Graduated from college or technical school"="College graduated","Graduated high school"="High school gruadated"))+
+  facet_grid(.~genhlth) + 
+  geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage - .02 ), hjust = 0.3, size = 3)+
+   theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none"
+        ) +labs(x="Education")+ggtitle("Does education make you feel healthier?")
+```
+
+#Health Perception and Obesity
+
+##
+```{r, echo=FALSE}
+gHlthOb = brfss %>% 
+   filter(!is.na(X_bmi5cat), !is.na(X_rfbmi5),!is.na(X_state), !is.na(Region), !is.na(BMI_in) , !is.na(genhlth), !is.na(poorhlth), !is.na(X_rfhlth),
+          !is.na(physhlth),!is.na(menthlth), !is.na(X_age80) , !is.na(sex)) %>% 
+    dplyr::select(X_bmi5cat,Obesity = X_rfbmi5, X_state,  BMI_in, Region , genhlth,poorhlth,physhlth, menthlth, X_age80, sex ,Health = X_rfhlth) %>% 
+    mutate(X_bmi5cat = ordered(factor(X_bmi5cat, levels = c("Underweight", "Normal weight", "Overweight", "Obese")))) %>% 
+    mutate(genhlth = ordered(factor(genhlth, levels = c("Poor", "Fair", "Good", "Very good", "Excellent"))))
+
+mosaicplot(~ Health + Obesity, 
+           main = "50% of overweight and obese respondents report good health",
+           data = gHlthOb, 
+           color = TRUE, las = 1, shade = TRUE)
+```
+
+
+##  
+```{r, echo=FALSE}
+ggplot(gHlthOb, aes(genhlth,BMI_in ))+
+    geom_boxplot(aes(fill = genhlth),alpha = .6,size = 1)+
+    scale_fill_brewer(palette = "Set2") + 
+    geom_point(stat = "summary", fun.y = "mean", color = "red", size = 4)+
+    ggtitle("No difference in BMI between Poor and Good Health")+
+    labs(x = "Health", y = "BMI", fill = "Health")+
+    theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(),
+        legend.position = "none"
+        ) 
+```
+
+## 
+```{r, echo=FALSE}
+ggplot(gHlthOb, aes(genhlth,poorhlth ))+
+    geom_boxplot(aes(fill = genhlth),alpha = .6,size = 1)+
+    geom_point(stat = "summary", fun.y = "mean", color = "red", size = 4)+
+    ggtitle("Number of days in month overall health was poor better indicator of health")+
+    labs(x = "Health", y = "# days poor health")+
+    theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(),
+        legend.position = "none"
+        )
+``` 
+ 
+## 
+ 
+```{r, echo=FALSE}
+ggplot(gHlthOb, aes(genhlth,physhlth ))+
+    geom_boxplot(aes(fill = genhlth),alpha = .6,size = 1)+
+    geom_point(stat = "summary", fun.y = "mean", color = "red", size = 4)+
+    ggtitle("Days in month overall physical health was poor is a better indicator of health")+
+    labs(x = "Health", y = "# days poor physical health")+
+    theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(),
+        legend.position = "none"
+        )
+```
+
+## 
+```{r, echo=FALSE}
+ggplot(gHlthOb, aes(genhlth,menthlth ))+
+    geom_boxplot(aes(fill = genhlth),alpha = .6,size = 1)+
+    geom_point(stat = "summary", fun.y = "mean", color = "red", size = 4)+
+    ggtitle("Number of days in month overall mental health was poor")+
+    labs(x = "Health", y = "# days poor mental health")+
+    theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(),
+        legend.position = "none"
+        )
+```
+
+##
+<img src = "C:/Users/Biljana/Desktop/bmi_funny.jpg" alt = "Image not loaded", width = "768", height = "600" />  
+
+##
+```{r, echo = FALSE}
+ob1 = brfss %>%
+  filter(!is.na(X_rfbmi5),!is.na(physhlth),!is.na(X_pacat1), !is.na(BMI_in), !is.na(X_bmi5cat) ) %>%
+  dplyr::select(X_rfbmi5,physhlth ,X_pacat1,BMI_in, X_bmi5cat)
+
+total_grp_ex = ob1 %>% 
+              group_by(X_rfbmi5) %>%
+              count(X_rfbmi5)
+
+perc_ex = ob1 %>% 
+         group_by(X_pacat1, X_rfbmi5)  %>% 
+         count(X_pacat1)
+perc_ex = merge(perc_ex, total_grp_ex, by = "X_rfbmi5")
+perc_ex= mutate(perc_ex, Percentage = n.x/n.y)
+
+ggplot(perc_ex, aes(x = X_pacat1, y = Percentage, fill = X_rfbmi5)) + 
+  geom_bar(stat= "identity", position = "dodge") + 
+  scale_y_continuous(labels = percent)+
+  facet_grid(.~X_rfbmi5) + 
+  ggtitle("Obese Respondends report vigorous exercise activity")+
+  geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage - .02 ), hjust = 0.3, size = 3)+
+  labs(x = "Activity Category", "Percentage")+
+   theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none"
+        )
+
+```
+
+##
+```{r, echo = FALSE}
+extypes = brfss %>%
+  filter(!is.na(X_rfbmi5),!is.na(physhlth),!is.na(X_pacat1), !is.na(BMI_in), !is.na(X_bmi5cat),!is.na(exract11),!is.na(pa1min_),!is.na(exerany2), !is.na(actin11_)  ) %>%
+  filter(exract11 == "Walking" | exract11 == "Running"|
+                    exract11 == "Gardening (spading, weeding, digging, filling)" | 
+                    exract11 == "Weight lifting" | exract11 == "Bicycling") %>%
+  filter(X_rfbmi5 == "Yes")%>%
+  dplyr::select(X_rfbmi5,physhlth ,X_pacat1,BMI_in, X_bmi5cat, exract11, pa1min_, exerany2,actin11_)
+
+total_grp_ex = extypes %>% 
+              group_by(X_rfbmi5) %>%
+              count(X_rfbmi5)
+
+perc_extype = extypes %>% 
+         group_by(exract11, X_rfbmi5)  %>% 
+         count(exract11)
+perc_extype = merge(perc_extype, total_grp_ex, by = "X_rfbmi5")
+perc_extype= mutate(perc_extype, Percentage = n.x/n.y)
+
+ggplot(perc_extype, aes(x = exract11, y = Percentage, fill = X_rfbmi5)) + 
+  geom_bar(stat= "identity", position = "dodge") + 
+  scale_y_continuous(labels = percent)+
+   scale_x_discrete(labels=c("Running" = "Running",
+                            "Bicycling" = "Bicycling",
+                              "Weight lifting" = "Weight Lifting",
+                            "Gardening (spading, weeding, digging, filling)" = "Gardening", 
+                            "Walking" = "Walking"))+
+  ggtitle("Exercise! Of course I exercise!")+
+  labs( x = "exercise Types")+
+  geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage - .02 ), hjust = 0.3, size = 3)+
+   theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(),
+        legend.position = "none"
+        )
+```
+
+##
+```{r, echo = FALSE}
+ExMin = brfss %>% filter(!is.na(BMI_in),!is.na(exract11), !is.na(X_paindx1),!is.na(padur1_),
+                         !is.na(pa1min_), !is.na(X_totinda), !is.na(X_pa150r2), !is.na(X_pa300r2), !is.na(X_rfbmi5)) %>% 
+    dplyr::select(BMI_in,exract11,X_paindx1,padur1_, pa1min_, X_totinda, X_pa150r2, X_pa300r2, X_rfbmi5)
+
+ggplot(ExMin, aes(padur1_,BMI_in , color=X_rfbmi5))+
+    geom_point(aes(color = X_rfbmi5), alpha = 1/4)+
+    geom_jitter(aes(color = X_rfbmi5), alpha = 1/3)+
+    coord_cartesian(xlim = c(0,200))+
+    
+    theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(hjust = 1),
+        aspect.ratio = 3 / 5 
+        ) +
+  labs(x = "Total Weekly exercise in Minutes", y = "BMI", color= "Obesity")+
+    ggtitle("Most do not meet CDC's exercise time recomedations")
+```
+
+##
+```{r, echo = FALSE}
+HlthEmploy = brfss %>% 
+   filter(!is.na(BMI_in), !is.na(poorhlth), !is.na(physhlth),!is.na(menthlth), !is.na(sex), !is.na(employ1), !is.na(genhlth)) %>% 
+    dplyr::select(BMI_in, poorhlth,physhlth, menthlth, X_age80, sex , employ1, genhlth) %>% 
+    mutate(genhlth = ordered(factor(genhlth, levels = c("Poor", "Fair", "Good", "Very good", "Excellent"))))
+
+ggplot(HlthEmploy, aes(BMI_in, poorhlth))+
+    geom_point(aes(color = employ1), alpha = 1/2)+
+    facet_wrap(~genhlth, ncol = 1)+
+   theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 90, hjust = 1)
+        )+
+    labs(x = "BMI", y = "# Days in poor health", color = "Employment")
+```
+
+#Chronic Diseases
+
+##
+
+```{r,echo=FALSE}
+
+
+diseases <- c('Diabetes','Asthma','High Blood Pressure','Cancer','High Cholesterol','COPD','Depression','Hearth Attack','Stroke')
+dpercent <- c(.116,.124,.372,.09,.347,.077,.18,.055,.038)
+
+alldisease <- data.frame(diseases, dpercent)%>%mutate(diseases = ordered(factor(diseases, levels = c("Stroke", "Hearth Attack", "COPD", "Cancer",  "Diabetes","Asthma","Depression","High Cholesterol", "High Blood Pressure")))) 
+
+
+
+ggplot(data = alldisease, aes(x = factor(diseases), y = dpercent, fill=diseases)) + geom_bar(stat="identity", position = "dodge") +
+ scale_y_continuous(labels=percent) + 
+ geom_text(aes(label = scales::percent(round((dpercent), 2)), y = dpercent - .02 ), hjust = 0.3, vjust = -2, size = 3.3)+
+labs(x="General Health",y="Percentage")+
+  
+ ggtitle("The land of the free, the land of the disease")+
+   theme(panel.background = element_blank(),
+       axis.line = element_line(),
+        legend.position="none",
+       axis.text.x = element_text(angle = 45, hjust = 1)
+       )
+```
+
+##
+
+```{r,echo=FALSE}
+dat.temp2 <- brfss %>% select(c(bphigh4, X_rfbing5, genhlth)) %>% filter(X_rfbing5!='NA',bphigh4!='NA',genhlth!='NA')%>%mutate(genhlth = ordered(factor(genhlth, levels = c("Poor", "Fair", "Good", "Very good", "Excellent"))))%>% filter(bphigh4=='Yes' | bphigh4=='No')
+total.grp <- dat.temp2 %>% group_by(genhlth) %>% count(genhlth)
+
+dat.plot <- dat.temp2 %>% group_by(genhlth, genhlth, bphigh4) %>% count(genhlth)
+dat.plot <- merge(dat.plot, total.grp, by = "genhlth")
+dat.plot <- mutate(dat.plot, Percentage = n.x/n.y)
+
+ggplot(data = dat.plot, aes(x = factor(genhlth), y = Percentage,  fill = bphigh4)) + geom_bar(stat="identity", position = "dodge") +
+ scale_y_continuous(labels=percent) +
+ 
+  
+ geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage - .02 ), position=position_dodge(width = 0.9),vjust= -1,size=4)+
+labs(x="General Health",fill="High Blood Pressure")+
+
+ggtitle("Feel the pressure yet?")+
+   theme(panel.background = element_blank(),
+       axis.line = element_line(),
+       axis.text.x = element_text()
+       )
+```
+
+##
+
+```{r,echo=FALSE}
+dat.temp2 <- brfss %>% filter(X_rfchol=='Yes' | X_rfchol=='No') %>% select(c(X_rfchol, X_rfbing5, genhlth)) %>% filter(X_rfbing5!='NA',X_rfchol!='NA',genhlth!='NA')%>%mutate(genhlth = ordered(factor(genhlth, levels = c("Poor", "Fair", "Good", "Very good", "Excellent"))))
+total.grp <- dat.temp2 %>% group_by(genhlth) %>% count(genhlth)
+
+dat.plot <- dat.temp2 %>% group_by(genhlth, genhlth, X_rfchol) %>% count(genhlth)
+dat.plot <- merge(dat.plot, total.grp, by = "genhlth")
+dat.plot <- mutate(dat.plot, Percentage = n.x/n.y)
+
+ggplot(data = dat.plot, aes(x = factor(genhlth), y = Percentage,  fill = X_rfchol)) + geom_bar(stat="identity", position = "dodge") +
+ scale_y_continuous(labels=percent) +
+ 
+  
+ geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage - .02 ),position=position_dodge(width = 0.9),vjust= -1,size=4)+
+labs(x="General Health",fill="High Cholesterol")+
+
+ggtitle("High cholesterol respondents report good or better health?")+
+   theme(panel.background = element_blank(),
+       axis.line = element_line(),
+       axis.text.x = element_text()
+       )
+```
+
+
+
+##
+
+```{r,echo=FALSE}
+dat.temp2 <- brfss %>% filter(diabete3=='Yes' | diabete3=='No') %>% select(c(addepev2, X_rfbing5, genhlth)) %>% filter(X_rfbing5!='NA',addepev2!='NA',genhlth!='NA')%>%mutate(genhlth = ordered(factor(genhlth, levels = c("Poor", "Fair", "Good", "Very good", "Excellent"))))
+total.grp <- dat.temp2 %>% group_by(genhlth) %>% count(genhlth)
+
+dat.plot <- dat.temp2 %>% group_by(genhlth, genhlth, addepev2) %>% count(genhlth)
+dat.plot <- merge(dat.plot, total.grp, by = "genhlth")
+dat.plot <- mutate(dat.plot, Percentage = n.x/n.y)
+
+ggplot(data = dat.plot, aes(x = factor(genhlth), y = Percentage,  fill = addepev2)) + geom_bar(stat="identity", position = "dodge") +
+ scale_y_continuous(labels=percent) +
+ 
+  
+ geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage - .02 ),position=position_dodge(width = 0.9),vjust= -1,size=4)+
+labs(x="General Health",fill="Depresion")+
+
+ggtitle("Happy is healthy")+
+   theme(panel.background = element_blank(),
+       axis.line = element_line(),
+       axis.text.x = element_text()
+       )
+```
+
+
+
+
+##
+
+```{r,echo=FALSE}
+dat.temp2 <- brfss   %>% filter(diabete3=='Yes' | diabete3=='No') %>% select(c(diabete3, X_rfbing5, genhlth)) %>% filter(X_rfbing5!='NA',diabete3!='NA',genhlth!='NA')%>%mutate(genhlth = ordered(factor(genhlth, levels = c("Poor", "Fair", "Good", "Very good", "Excellent"))))
+total.grp <- dat.temp2 %>% group_by(genhlth) %>% count(genhlth)
+
+dat.plot <- dat.temp2 %>% group_by(genhlth, genhlth, diabete3) %>% count(genhlth)
+dat.plot <- merge(dat.plot, total.grp, by = "genhlth")
+dat.plot <- mutate(dat.plot, Percentage = n.x/n.y)
+
+ggplot(data = dat.plot, aes(x = factor(genhlth), y = Percentage,  fill = diabete3)) + geom_bar(stat="identity", position = "dodge") +
+ scale_y_continuous(labels=percent) +
+ 
+  
+ geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage - .02 ), position=position_dodge(width = 0.9),vjust= -1,size=4)+
+labs(x="General Health",fill="Diabetes")+
+
+ggtitle("I tought I was healthy")+
+   theme(panel.background = element_blank(),
+       axis.line = element_line(),
+       axis.text.x = element_text()
+       )
+```
+
+##
+
+```{r,echo=FALSE}
+
+Regions2 <- c('Midwest Region','Northeast Region','South Region','West Region')
+rpercent <- c(.269,.154,.397,.18)
+
+allregion <- data.frame(Regions2, rpercent)#%>%mutate(diseases = ordered(factor(diseases, levels = c("Stroke", "Hearth Attack", "COPD", "Cancer",  "Diabetes","Asthma","Depression","High Cholesterol", "High Blood Pressure")))) 
+
+
+
+ggplot(data = allregion, aes(x = factor(Regions2), y = rpercent, fill=Regions2)) + geom_bar(stat="identity", position = "dodge") +
+ scale_y_continuous(labels=percent) + 
+ 
+  
+ geom_text(aes(label = scales::percent(round((rpercent), 2)), y = rpercent - .02 ),position=position_dodge(width = 0.9),vjust= -1.5,size=4)+
+labs(x="General Health",y="Percentage")+
+ ggtitle("Where is the highest diabetes prevalence?")+
+   theme(panel.background = element_blank(),
+       axis.line = element_line(),
+        legend.position="none",
+       axis.text.x = element_text(angle = 45, hjust = 1)
+       )
+
+```
+
+
+##
+
+```{r,echo=FALSE}
+dat.temp <- brfss %>% filter(diabete3=='Yes' | diabete3=='No') %>% select(c(sex, X_rfbing5, diabete3)) %>% filter(X_rfbing5!='NA')
+
+total.grp <- dat.temp %>% group_by(X_rfbing5) %>% count(X_rfbing5)
+
+dat.plot <- dat.temp %>% group_by(X_rfbing5, diabete3, sex) %>% count(diabete3)
+dat.plot <- merge(dat.plot, total.grp, by = "X_rfbing5")
+dat.plot <- mutate(dat.plot, Percentage = n.x/n.y)
+
+ggplot(data = dat.plot, aes(x = factor(diabete3), y = Percentage,  fill = sex)) + geom_bar(stat="identity", position = "dodge") +
+ scale_y_continuous(labels=percent) +
+ facet_grid(.~ X_rfbing5) + 
+  
+ geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage - .02 ), position=position_dodge(width = 0.9),vjust= -1,size=4)+
+labs(x="Diabetes")+
+
+ggtitle("Fit women at higher risk of dibetes, for men it is obesity")+
+   theme(panel.background = element_blank(),
+       axis.line = element_line(),
+       axis.text.x = element_text()
+       )
+  
+  
+```
+
+
+##
+
+```{r,echo=FALSE}
+ageinsul2 <- brfss %>% select(c(X_age80,conv_weight,sex,diabete3)) %>% filter(X_age80!='NA',conv_weight!='NA',diabete3!='NA')%>% filter(diabete3=='Yes' | diabete3=='No')
+ggplot(ageinsul2, aes(X_age80,conv_weight)) +
+  geom_jitter(aes(color=diabete3),alpha=.9)+
+  coord_cartesian(xlim = c(19,80))+
+      ggtitle("Risk of diabetes increases at 40")+
+  labs(x="Age",y= "Weight (Pounds)" ,color="Diabetes")+
+   theme(panel.background = element_blank(),
+       axis.line = element_line(),
+       axis.text.x = element_text()
+       )
+
+```
+
+
+
+##
+
+```{r,echo=FALSE}
+ageinsul <- brfss %>% select(c(insulin,diabage2,X_age80)) %>% filter(insulin!='NA',diabage2!='NA', X_age80!='NA')
+ggplot(ageinsul, aes(X_age80,diabage2))+
+  geom_point(aes(color=insulin))+
+  coord_cartesian(xlim = c(19,75))+
+  labs(x= "Current Age", y="Age when Diagnosed",color= "Insulin Intake")+
+    ggtitle("The older you are when diagnosed, more likely not to take insulin")+
+   theme(panel.background = element_blank(),
+       axis.line = element_line(),
+       axis.text.x = element_text()
+       )
+  
+```
+
+
+
+# Behavioral Risks
+
+##
+<img src = "C:/Users/Biljana/Desktop/got_advice.jpeg" alt = "Image not loaded",width = "768", height = "600" />
+
+##
+```{r, echo = FALSE}
+brfss$income2_factor = factor(brfss$income2, 
+                       levels = c("Less than $10,000", "Less than $15,000", "Less than $20,000", "Less than $25,000" ,
+                                  "Less than $35,000", "Less than $50,000", "Less than $75,000", "$75,000 or more"))
+
+
+Diabetes_income = brfss %>% dplyr::select(income2_factor, diabete3) %>% filter(diabete3 == "Yes" | diabete3 == "No")
+
+Diabetes_income_clean = Diabetes_income[complete.cases(Diabetes_income), ]
+
+total.grp <- Diabetes_income_clean %>% group_by(income2_factor) %>% count(income2_factor)
+
+dat.plot <- Diabetes_income_clean %>% group_by(income2_factor, diabete3) %>% count(income2_factor)
+dat.plot <- merge(dat.plot, total.grp, by = "income2_factor")
+dat.plot <- mutate(dat.plot, Percentage = n.x/n.y)
+
+ggplot(data = dat.plot, aes(x = factor(income2_factor), y = Percentage,  fill = diabete3)) + geom_bar(stat="identity", position = "dodge") +
+ scale_y_continuous(labels=percent) +
+ 
+ 
+  geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage + .009 ), position=position_dodge(width=0.9), vjust=-0.25, size=3.1)+
+   
+  labs( x="Income Level $", title = "More money, Less problems!", fill = "Diabetes") + 
+  scale_x_discrete( labels = c( "Less than $10,000" = "<10K" , "Less than $15,000" = "10K-15K" , 
+                                "Less than $20,000" = "15K-20K" , "Less than $25,000" = "20K-25K",  
+                                "Less than $35,000" = "25K-35K", "Less than $50,000" = "35K-50K",
+                                "Less than $75,000" = "50K-75K", "$75,000 or more" = "Over 75K" )) +
+  theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 0, hjust = .5)
+        )
+
+
+```
+
+
+##
+```{r, echo = FALSE}
+brfss$income2_factor = factor(brfss$income2, 
+                       levels = c("Less than $10,000", "Less than $15,000", "Less than $20,000", "Less than $25,000" ,
+                                  "Less than $35,000", "Less than $50,000", "Less than $75,000", "$75,000 or more"))
+
+
+DEPRESSION_income = brfss %>% dplyr::select(income2_factor, addepev2)
+
+DEPRESSION_income_clean = DEPRESSION_income[complete.cases(DEPRESSION_income), ]
+
+total.grp <- DEPRESSION_income_clean %>% group_by(income2_factor) %>% count(income2_factor)
+
+dat.plot <- DEPRESSION_income_clean %>% group_by(income2_factor, addepev2) %>% count(income2_factor)
+dat.plot <- merge(dat.plot, total.grp, by = "income2_factor")
+dat.plot <- mutate(dat.plot, Percentage = n.x/n.y)
+
+ggplot(data = dat.plot, aes(x = factor(income2_factor), y = Percentage,  fill = addepev2)) + geom_bar(stat="identity", position = "dodge") +
+ scale_y_continuous(labels=percent) +
+ 
+  
+  geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage + .009 ), position=position_dodge(width=0.9), vjust=-0.25, size=3.1)+
+  
+  labs( x="Income Level $", title = "With poverty comes depression", fill = "Depression") + 
+  scale_x_discrete( labels = c( "Less than $10,000" = "<10K" , "Less than $15,000" = "10K-15K" , 
+                                "Less than $20,000" = "15K-20K" , "Less than $25,000" = "20K-25K",  
+                                "Less than $35,000" = "25K-35K", "Less than $50,000" = "35K-50K",
+                                "Less than $75,000" = "50K-75K", "$75,000 or more" = "Over 75K" ))+
+  theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 0, hjust = .5)
+        )
+```
+
+##
+
+```{r, echo=FALSE}
+brfss$income2_factor = factor(brfss$income2, 
+                       levels = c("Less than $10,000", "Less than $15,000", "Less than $20,000", "Less than $25,000" ,
+                                  "Less than $35,000", "Less than $50,000", "Less than $75,000", "$75,000 or more"))
+
+
+CANCER_income = brfss %>% dplyr::select(income2_factor, chcocncr)
+
+CANCER_income_clean = CANCER_income[complete.cases(CANCER_income), ]
+
+total.grp <- CANCER_income_clean %>% group_by(income2_factor) %>% count(income2_factor)
+
+dat.plot <- CANCER_income_clean %>% group_by(income2_factor, chcocncr) %>% count(income2_factor)
+dat.plot <- merge(dat.plot, total.grp, by = "income2_factor")
+dat.plot <- mutate(dat.plot, Percentage = n.x/n.y)
+
+ggplot(data = dat.plot, aes(x = factor(income2_factor), y = Percentage,  fill = chcocncr)) + geom_bar(stat="identity", position = "dodge") +
+ scale_y_continuous(labels=percent) +
+ 
+  
+  geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage + .009 ), position=position_dodge(width=0.9), vjust=-0.25, size=3.1)+
+  
+  labs( x="Income Level $", title = "Money won't save you (from cancer) ", fill = "Cancer") + 
+  scale_x_discrete( labels = c( "Less than $10,000" = "<10K" , "Less than $15,000" = "10K-15K" , 
+                                "Less than $20,000" = "15K-20K" , "Less than $25,000" = "20K-25K",  
+                                "Less than $35,000" = "25K-35K", "Less than $50,000" = "35K-50K",
+                                "Less than $75,000" = "50K-75K", "$75,000 or more" = "Over 75K" ))+
+  theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 0, hjust = .5)
+        )
+```
+
+##
+
+```{r, echo = FALSE}
+brfss$income2_factor = factor(brfss$income2, 
+                       levels = c("Less than $10,000", "Less than $15,000", "Less than $20,000", "Less than $25,000" ,
+                                  "Less than $35,000", "Less than $50,000", "Less than $75,000", "$75,000 or more"))
+
+health_income = brfss %>%       
+  dplyr::select(income2_factor, poorhlth) 
+
+health_income_clean = health_income[complete.cases(health_income), ]
+ggplot(health_income_clean, aes(x = income2_factor, y = poorhlth)) + 
+  
+  geom_boxplot(outlier.shape = NA) + 
+  geom_point(stat = "summary", fun.y = "mean", color = "blue", size = 4)+
+  labs(x = "Income Level", y = "Number of days of bad health", title = " Get rich or die tryin'")+
+   theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 0, hjust = .5)
+        ) +
+  scale_x_discrete( labels = c( "Less than $10,000" = "<10K" , "Less than $15,000" = "10K-15K" , 
+                                "Less than $20,000" = "15K-20K" , "Less than $25,000" = "20K-25K",  
+                                "Less than $35,000" = "25K-35K", "Less than $50,000" = "35K-50K",
+                                "Less than $75,000" = "50K-75K", "$75,000 or more" = "Over 75K" ))
+```
+
+##
+<img src = "C:/Users/Biljana/Desktop/smoker.jpeg" alt = "Image not loaded", width = "768", height = "600" />
+
+##
+```{r, echo = FALSE}
+CANCER_smokers = brfss %>% dplyr::select(X_smoker3, chcocncr)
+
+CANCER_smokers_clean = CANCER_smokers[complete.cases(CANCER_smokers), ]
+
+total.grp <- CANCER_smokers_clean %>% group_by(X_smoker3) %>% count(X_smoker3)
+
+dat.plot <- CANCER_smokers_clean %>% group_by(X_smoker3, chcocncr) %>% count(X_smoker3)
+dat.plot <- merge(dat.plot, total.grp, by = "X_smoker3")
+dat.plot <- mutate(dat.plot, Percentage = n.x/n.y)
+
+ggplot(data = dat.plot, aes(x = X_smoker3, y = Percentage,  fill = chcocncr)) + 
+  
+  geom_bar(stat = "identity", position = "dodge") +
+  
+ scale_y_continuous(labels=percent) +
+ geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage + .009 ), position=position_dodge(width=0.9), vjust=-0.25, size=3.1)+
+  
+  labs(x = NULL, title = "Smoking data is problematic", fill = "Cancer") + 
+  scale_x_discrete( labels = c( "Current smoker - now smokes some days" = "Occasional Smoker", 
+                                 "Current smoker - now smokes every day" = "Smoker" )) +
+  
+  theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 0, hjust = .5)
+        )
+```
+
+##
+```{r, echo = FALSE}
+brfss$bmi_factor = factor(brfss$X_bmi5cat,
+                       levels = c( "Obese" , "Overweight" , "Normal weight" , "Underweight" ))
+
+
+Diabetes_WEIGHT = brfss %>% dplyr::select(bmi_factor, diabete3) %>% filter(diabete3 == "Yes" | diabete3 == "No")
+
+Diabetes_WEIGHT_clean = Diabetes_WEIGHT[complete.cases(Diabetes_WEIGHT), ]
+
+total.grp <- Diabetes_WEIGHT_clean %>% group_by(bmi_factor) %>% count(bmi_factor)
+
+dat.plot <- Diabetes_WEIGHT_clean %>% group_by(bmi_factor , diabete3) %>% count(bmi_factor)
+dat.plot <- merge(dat.plot, total.grp, by = "bmi_factor")
+dat.plot <- mutate(dat.plot, Percentage = n.x/n.y)
+
+ggplot(data = dat.plot, aes(x = bmi_factor, y = Percentage,  fill = diabete3)) + 
+  
+  geom_bar(stat="identity", position = "dodge") +
+ scale_y_continuous(labels=percent) +
+ 
+ 
+  geom_text(aes(label = scales::percent(round((Percentage), 2)), y = Percentage + .009 ), position=position_dodge(width=0.9), vjust=-0.25, size=3.1) +
+   
+  labs( x= NULL, title = "Gaining weight is risky business", fill = "Diabetes") +
+  
+  theme(panel.background = element_blank(),
+        axis.line = element_line(),
+        axis.text.x = element_text(angle = 0, hjust = .5)
+        )
+
+```
+
+
+   
